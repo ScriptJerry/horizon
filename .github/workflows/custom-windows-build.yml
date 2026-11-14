@@ -1,0 +1,26 @@
+name: custom-windows-build
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      RUSTFLAGS: -C target-feature=+crt-static
+      HORIZON_VERSION: custom-perf-2026-11-13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build horizon-official (horizon-client.exe)
+        run: cargo build --release --locked -p horizon-official --bin horizon-official
+      - name: Package horizon-client.exe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item "target\release\horizon-official.exe" "dist\horizon-client.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: horizon-client-windows-x64
+          path: dist/horizon-client.exe

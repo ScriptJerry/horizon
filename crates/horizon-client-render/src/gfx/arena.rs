@@ -723,15 +723,27 @@ impl<T> Graveyard<T> {
     }
 }
 
-/// Drops `items` on a short-lived thread of its own, as `chunk::free_columns` does for
-/// unloaded chunks; should the thread not start, they drop here.
+/// Drops `items` on a standing background thread so the render thread never
+/// stalls on GPU buffer deallocation or per-frame OS thread creation.
 pub fn free_later<T: Send + 'static>(items: Vec<T>) {
+    use std::sync::{OnceLock, mpsc};
+    static TX: OnceLock<mpsc::Sender<Box<dyn FnOnce() + Send>>> = OnceLock::new();
+
     if items.is_empty() {
         return;
     }
-    let _ = std::thread::Builder::new()
-        .name("Buffer freeing".into())
-        .spawn(move || drop(items));
+    let tx = TX.get_or_init(|| {
+        let (tx, rx) = mpsc::channel::<Box<dyn FnOnce() + Send>>();
+        let _ = std::thread::Builder::new()
+            .name("Buffer freeing".into())
+            .spawn(move || {
+                while let Ok(job) = rx.recv() {
+                    job();
+                }
+            });
+        tx
+    });
+    let _ = tx.send(Box::new(move || drop(items)));
 }
 
 /// `create_buffer` with an out-of-memory failure returned instead of raised

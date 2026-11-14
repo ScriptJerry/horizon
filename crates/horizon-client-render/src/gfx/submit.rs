@@ -19,7 +19,7 @@ pub fn wanted() -> bool {
     match std::env::var("HORIZON_SUBMIT_THREAD").as_deref() {
         Ok("0") => false,
         Ok("1") => true,
-        _ => cfg!(target_os = "linux"),
+        _ => cfg!(any(target_os = "linux", windows)),
     }
 }
 

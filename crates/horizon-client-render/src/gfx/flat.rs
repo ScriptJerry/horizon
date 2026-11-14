@@ -231,7 +231,7 @@ fn parse_mesa_version(driver_info: &str) -> Option<(u32, u32, u32)> {
 /// flicker. Allow indirect multi-draw and GPU culling for Raptor Lake from that
 /// release; earlier or unidentified drivers keep the workaround.
 pub fn is_broken_intel_vulkan(info: &wgpu::AdapterInfo) -> bool {
-    if info.backend != wgpu::Backend::Vulkan || info.vendor != 0x8086 {
+    if info.backend != wgpu::Backend::Vulkan || info.vendor != 0x8086 || !cfg!(target_os = "linux") {
         return false;
     }
 

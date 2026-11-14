@@ -222,7 +222,78 @@ fn performance_cores() -> Option<usize> {
     None
 }
 
-#[cfg(not(any(target_vendor = "apple", target_os = "linux")))]
+#[cfg(windows)]
+fn performance_cores() -> Option<usize> {
+    use windows_sys::Win32::Foundation::ERROR_INSUFFICIENT_BUFFER;
+    use windows_sys::Win32::System::SystemInformation::{
+        GetLogicalProcessorInformationEx, RelationProcessorCore,
+        SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX,
+    };
+
+    let mut len: u32 = 0;
+    // SAFETY: querying required buffer size with null pointer and zero length.
+    unsafe {
+        GetLogicalProcessorInformationEx(RelationProcessorCore, std::ptr::null_mut(), &mut len);
+        if windows_sys::Win32::Foundation::GetLastError() != ERROR_INSUFFICIENT_BUFFER || len == 0 {
+            return None;
+        }
+    }
+
+    let mut buf = vec![0u8; len as usize];
+    // SAFETY: `buf` is at least `len` bytes as returned by GetLogicalProcessorInformationEx.
+    let ok = unsafe {
+        GetLogicalProcessorInformationEx(
+            RelationProcessorCore,
+            buf.as_mut_ptr().cast::<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(),
+            &mut len,
+        )
+    };
+    if ok == 0 {
+        return None;
+    }
+
+    let mut cores = Vec::new();
+    let mut offset = 0usize;
+    while offset + std::mem::size_of::<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>() <= len as usize {
+        // SAFETY: `offset` is within `len` and aligned by Windows' struct packing; read_unaligned is safe.
+        let info = unsafe {
+            buf.as_ptr()
+                .add(offset)
+                .cast::<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>()
+                .read_unaligned()
+        };
+        if info.Size == 0 {
+            break;
+        }
+        if info.Relationship == RelationProcessorCore {
+            // SAFETY: Relationship == RelationProcessorCore selects the `Processor` union variant.
+            let proc = unsafe { info.Anonymous.Processor };
+            let group_count = proc.GroupCount.max(1) as usize;
+            let mut threads = 0usize;
+            for g in 0..group_count {
+                if g == 0 {
+                    threads += proc.GroupMask[0].Mask.count_ones() as usize;
+                }
+            }
+            cores.push((proc.EfficiencyClass, threads.max(1)));
+        }
+        offset += info.Size as usize;
+    }
+
+    let max_eff = cores.iter().map(|&(e, _)| e).max()?;
+    let min_eff = cores.iter().map(|&(e, _)| e).min()?;
+    if max_eff == min_eff {
+        return None;
+    }
+    let p_threads: usize = cores
+        .iter()
+        .filter(|&&(e, _)| e == max_eff)
+        .map(|&(_, t)| t)
+        .sum();
+    (p_threads > 0).then_some(p_threads)
+}
+
+#[cfg(not(any(target_vendor = "apple", target_os = "linux", windows)))]
 fn performance_cores() -> Option<usize> {
     None
 }
@@ -377,7 +448,12 @@ fn behind() -> bool {
     }
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(windows)]
+fn behind() -> bool {
+    far()
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", windows)))]
 fn behind() -> bool {
     false
 }

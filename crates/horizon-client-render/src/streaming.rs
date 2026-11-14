@@ -3120,7 +3120,7 @@ fn same_values(
 
 /// The most changed blocks one frame relights itself (`Streaming::relight_edits`): a 16^3
 /// section's worth. Past it, the columns are lit again whole on the workers.
-const INLINE_RELIGHT_MAX: usize = 4096;
+const INLINE_RELIGHT_MAX: usize = 64;
 
 /// Splits edits at `positions` into the columns to light again whole and the
 /// edits to relight in place. An edited column is lit whole with its

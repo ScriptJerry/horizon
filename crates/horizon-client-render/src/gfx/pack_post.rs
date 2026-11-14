@@ -4691,9 +4691,9 @@ impl PackPost {
                 horizon_shaders::ShadowCulling::Off => Some(f32::INFINITY),
                 horizon_shaders::ShadowCulling::Reversed => Some(shadow.voxel_distance),
             },
-            every_face: true,
+            every_face: false,
             view_casters: true,
-            depth_planes: false,
+            depth_planes: true,
         })
     }
 
